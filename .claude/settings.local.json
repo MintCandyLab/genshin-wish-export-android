@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn add:*)",
+      "Bash(cd /d D:workspacegenshin-wish-export-main)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

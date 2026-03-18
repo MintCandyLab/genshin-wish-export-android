@@ -1,0 +1,61 @@
+/* Android 特定样式 */
+
+/* 适配移动端触摸 */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* 禁用文本选择（除了输入框） */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* 滚动条样式优化 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+/* 按钮触摸反馈 */
+.el-button {
+  transition: opacity 0.2s;
+}
+
+.el-button:active {
+  opacity: 0.7;
+}
+
+/* 移动端对话框优化 */
+.el-dialog {
+  max-width: 90vw !important;
+  margin: 10vh auto !important;
+}
+
+/* 输入框在移动端的优化 */
+.el-textarea__inner {
+  font-size: 16px; /* 防止 iOS 缩放 */
+}
+
+/* 状态栏适配（Android 沉浸式） */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
