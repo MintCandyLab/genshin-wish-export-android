@@ -246,7 +246,7 @@ const detailData = computed(() => {
 
   // 为每个祈愿类型计算详细统计
   const result = []
-  const sheetOrder = ['301', '302', '200', '500', '100']
+  const sheetOrder = ['301', '302', '500', '200', '100']
 
   for (const key of sheetOrder) {
     const items = grouped[key]
@@ -353,7 +353,7 @@ const processImportData = async (importData) => {
 
     // 展平数据，保持按组分组的顺序
     result = []
-    const sheetOrder = ['301', '302', '200', '500', '100']
+    const sheetOrder = ['301', '302', '500', '200', '100']
     for (const key of sheetOrder) {
       if (grouped[key]) {
         result.push(...grouped[key])
@@ -363,7 +363,6 @@ const processImportData = async (importData) => {
     gachaData = result
     state.status = 'loaded'
     state.log = `成功导入 ${result.length} 条记录`
-    state.saveDirectoryInfo = '导出Excel时将按优先级保存到: Documents → External → Cache → Data'
     state.showUrlDlg = false
     state.selectedFileName = ''
 
@@ -715,7 +714,6 @@ const fetchData = async (url) => {
     gachaData = mergedData
     state.status = 'loaded'
     state.log = `成功获取 ${mergedData.length} 条记录`
-    state.saveDirectoryInfo = '导出Excel时将按优先级保存到: Documents → External → Cache → Data'
     state.showUrlDlg = false
 
     ElMessage.success(`成功获取 ${mergedData.length} 条记录`)
@@ -764,7 +762,7 @@ const exportExcel = async () => {
     }
 
     // 祈愿类型顺序（用于控制sheet顺序）
-    const sheetOrder = ['301', '302', '200', '500', '100']  // 角色、武器、常驻、集录、新手
+    const sheetOrder = ['301', '302', '500', '200', '100']  // 角色、武器、集录、常驻、新手
 
     // 数据分组（按祈愿类型）
     const groupedData = {}
@@ -1059,7 +1057,7 @@ const shareExcel = async () => {
     }
 
     // 祈愿类型顺序（用于控制sheet顺序）
-    const sheetOrder = ['301', '302', '200', '500', '100']  // 角色、武器、常驻、集录、新手
+    const sheetOrder = ['301', '302', '500', '200', '100']  // 角色、武器、集录、常驻、新手
 
     // 数据分组（按祈愿类型）
     const groupedData = {}
@@ -1356,7 +1354,7 @@ const shareGachaExcel = async () => {
     }
 
     // 祈愿类型顺序（用于控制sheet顺序）
-    const sheetOrder = ['301', '302', '200', '500', '100']  // 角色、武器、常驻、集录、新手
+    const sheetOrder = ['301', '302', '500', '200', '100']  // 角色、武器、集录、常驻、新手
 
     // 数据分组（按祈愿类型）
     const groupedData = {}
