@@ -54,31 +54,19 @@
       <p v-if="state.log" class="log-text">{{ state.log }}</p>
     </div>
 
-    <div v-if="gachaData && gachaData.length > 0" class="data-preview">
-      <h3>数据预览（共 {{ gachaData.length }} 条）</h3>
-      <el-table :data="displayData" stripe class="data-table" max-height="400">
-        <el-table-column prop="time" label="时间" width="160" />
-        <el-table-column prop="name" label="名称" width="120" />
-        <el-table-column prop="item_type" label="类型" width="100" />
-        <el-table-column prop="rank_type" label="星级" width="80">
-          <template #default="scope">
-            <el-tag :type="getRankType(scope.row.rank_type)" size="small">
-              {{ scope.row.rank_type }} 星
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="gacha_type_name" label="祈愿类型" />
-      </el-table>
-      <p class="table-hint">* 仅显示最近 10 条，导出后将包含全部数据</p>
-    </div>
-
     <!-- 统计信息展示 -->
     <div v-if="gachaData && gachaData.length > 0" class="stats-container">
-      <h3 class="stats-title">祈愿统计</h3>
+      <div class="stats-overview">
+        <h3 class="stats-title">祈愿统计</h3>
+        <p class="stats-summary">包含所有祈愿类型的抽卡统计与历史数据</p>
+      </div>
+
       <div v-for="(item, index) in detailData" :key="index" class="stats-card">
         <div class="stats-header">
-          <h4>{{ gachaTypeMap[item[0]]?.name || item[0] }}</h4>
-          <span class="total-count">共 {{ item[1].total }} 抽</span>
+          <div class="stats-title-wrap">
+            <h4 class="stats-type">{{ gachaTypeMap[item[0]]?.name || item[0] }}</h4>
+            <span class="total-count">共 {{ item[1].total }} 抽</span>
+          </div>
         </div>
 
         <div class="chart-container">
@@ -1717,6 +1705,7 @@ onMounted(async () => {
   flex: 1;
   min-width: 100px;
   font-weight: bold;
+  color: #ffffff;
 }
 
 /* 更新数据按钮 - 使用更深的蓝色 */
@@ -1728,8 +1717,15 @@ onMounted(async () => {
 
 /* 导出Excel按钮 - 使用更深的绿色 */
 :deep(.action-btn.el-button--success) {
-  background-color: #52c41a;
-  border-color: #52c41a;
+  background-color: #389e0d;
+  border-color: #389e0d;
+  color: #ffffff;
+}
+
+/* 分享按钮 - 统一为易读的深橙色 */
+:deep(.action-btn.el-button--warning) {
+  background-color: #d46b08;
+  border-color: #d46b08;
   color: #ffffff;
 }
 
@@ -1763,17 +1759,6 @@ onMounted(async () => {
   margin: 8px 0 0;
 }
 
-.data-preview {
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
-}
-
-.data-preview h3 {
-  font-size: 16px;
-  margin: 0 0 12px;
-  color: #333;
-}
 
 .data-table {
   width: 100%;
@@ -1829,23 +1814,76 @@ onMounted(async () => {
   gap: 8px;
 }
 
-/* 导入选项样式 */
-.import-options {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
-}
+  /* 统计信息样式 */
+  .stats-overview {
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid #e7e7e7;
+    margin-bottom: 14px;
+  }
 
-.import-option {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  border: 2px solid #e8e8e8;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
+  .stats-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    color: #222;
+  }
+
+  .stats-summary {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: #666;
+  }
+
+  .stats-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .stats-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #f0f0f0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+
+  .stats-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stats-type {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    color: #222;
+  }
+
+  .total-count {
+    font-size: 13px;
+    color: #666;
+  }
+
+  .import-option {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    border: 2px solid #e8e8e8;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
 
 .import-option:hover {
   border-color: #409eff;
