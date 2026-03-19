@@ -1014,7 +1014,7 @@ const exportExcel = async () => {
 
     if (result.success) {
       state.log = `已保存: ${fileName}`
-      ElMessage.success(`已保存到文档: ${fileName}`)
+      ElMessage.success(`导出成功！已保存到 ${result.directoryPath}: ${fileName}`)
     } else {
       throw new Error(result.error || '保存失败')
     }

@@ -70,21 +70,22 @@ const Storage = {
   },
 
   /**
-   * 保存文件到设备（如 Excel 文件）
+   * 保存文件到设备（如 Excel 文件），按目录优先级尝试保存
    * @param {string} fileName - 文件名
    * @param {Blob|ArrayBuffer} data - 文件数据
-   * @param {string} directory - 目录类型（Documents, Downloads, Data）
+   * @param {string} preferredDirectory - 首选目录类型（将被忽略，使用优先级逻辑）
    */
-  async saveFile(fileName, data, directory = 'Documents') {
+  async saveFile(fileName, data, preferredDirectory = 'Documents') {
     try {
       const dirMap = {
         'Documents': Directory.Documents,
-        'Downloads': Directory.Downloads,
-        'Data': Directory.Data,
-        'Cache': Directory.Cache,
         'External': Directory.External,
-        'ExternalStorage': Directory.ExternalStorage
+        'Cache': Directory.Cache,
+        'Data': Directory.Data
       }
+
+      // 目录优先级：Documents > External > Cache > Data
+      const directoryPriority = ['Documents', 'External', 'Cache', 'Data']
 
       let base64Data
       if (data instanceof Blob) {
@@ -95,18 +96,50 @@ const Storage = {
         base64Data = data
       }
 
-      const result = await Filesystem.writeFile({
-        path: fileName,
-        data: base64Data,
-        directory: dirMap[directory] || Directory.Documents,
-        recursive: true
-      })
+      // 按优先级尝试保存
+      for (const dirName of directoryPriority) {
+        try {
+          const result = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: dirMap[dirName],
+            recursive: true
+          })
 
-      return {
-        success: true,
-        uri: result.uri,
-        path: fileName
+          // 获取目录路径信息
+          let directoryPath = ''
+          switch (dirName) {
+            case 'Documents':
+              directoryPath = 'Documents（文档文件夹）'
+              break
+            case 'External':
+              directoryPath = 'External（外部存储）'
+              break
+            case 'Cache':
+              directoryPath = 'Cache（临时存储）'
+              break
+            case 'Data':
+              directoryPath = 'Data（应用私有存储）'
+              break
+          }
+
+          return {
+            success: true,
+            uri: result.uri,
+            path: fileName,
+            directory: dirName,
+            directoryPath: directoryPath
+          }
+        } catch (error) {
+          console.warn(`保存到 ${dirName} 目录失败:`, error.message)
+          // 继续尝试下一个目录
+          continue
+        }
       }
+
+      // 如果所有目录都失败了
+      throw new Error('所有目录都无法保存文件')
+
     } catch (error) {
       console.error('Storage.saveFile error:', error)
       return {
