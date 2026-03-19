@@ -52,6 +52,7 @@
         {{ statusText }}
       </el-tag>
       <p v-if="state.log" class="log-text">{{ state.log }}</p>
+      <p v-if="state.saveDirectoryInfo && state.status === 'loaded'" class="directory-info">{{ state.saveDirectoryInfo }}</p>
     </div>
 
     <!-- 统计信息展示 -->
@@ -181,7 +182,8 @@ const state = reactive({
   urlInput: '',
   showUrlDlg: false,
   importMode: 'url', // 'url' or 'file'
-  selectedFileName: ''
+  selectedFileName: '',
+  saveDirectoryInfo: '' // 保存目录信息
 })
 
 // 祈愿数据存储
@@ -361,6 +363,7 @@ const processImportData = async (importData) => {
     gachaData = result
     state.status = 'loaded'
     state.log = `成功导入 ${result.length} 条记录`
+    state.saveDirectoryInfo = '导出Excel时将按优先级保存到: Documents → External → Cache → Data'
     state.showUrlDlg = false
     state.selectedFileName = ''
 
@@ -712,6 +715,7 @@ const fetchData = async (url) => {
     gachaData = mergedData
     state.status = 'loaded'
     state.log = `成功获取 ${mergedData.length} 条记录`
+    state.saveDirectoryInfo = '导出Excel时将按优先级保存到: Documents → External → Cache → Data'
     state.showUrlDlg = false
 
     ElMessage.success(`成功获取 ${mergedData.length} 条记录`)
@@ -1638,6 +1642,7 @@ const clearData = async () => {
     gachaData = []
     state.status = 'init'
     state.log = ''
+    state.saveDirectoryInfo = ''
     await Storage.remove('gachaData')
 
     ElMessage.success('数据已清除')
@@ -1752,6 +1757,13 @@ onMounted(async () => {
   font-size: 12px;
   color: #666;
   margin: 8px 0 0;
+}
+
+.directory-info {
+  font-size: 11px;
+  color: #409eff;
+  margin: 6px 0 0;
+  font-weight: 500;
 }
 
 
