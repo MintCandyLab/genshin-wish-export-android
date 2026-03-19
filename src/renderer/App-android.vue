@@ -133,9 +133,9 @@
         <div class="help-text">
           <h4>如何获取json文件：</h4>
           <ul>
-            <li><strong>下载 小黑盒 app</li>
-            <li><strong>在小黑盒 app里绑定原神账号</li>
-            <li><strong>在小黑盒 app里点击 “祈愿分析” 最下面的 “数据管理”，选择“导出”</li>
+            <li><strong>下载 小黑盒 app</strong></li>
+            <li><strong>在小黑盒 app里绑定原神账号</strong></li>
+            <li><strong>在小黑盒 app里点击 “祈愿分析” 最下面的 “数据管理”，选择“导出”</strong></li>
           </ul>
         </div>
       </div>
@@ -292,8 +292,27 @@ const processImportData = async (importData) => {
       throw new Error('不支持的 JSON 格式')
     }
 
-    // 按时间排序
-    result.sort((a, b) => new Date(a.time) - new Date(b.time))
+    // 按 uigf_gacha_type 分组，然后每组内按时间排序（与桌面版逻辑一致）
+    const grouped = {}
+    for (const item of result) {
+      const key = item.uigf_gacha_type
+      if (!grouped[key]) grouped[key] = []
+      grouped[key].push(item)
+    }
+
+    // 每组内按时间排序
+    Object.keys(grouped).forEach(key => {
+      grouped[key].sort((a, b) => new Date(a.time) - new Date(b.time))
+    })
+
+    // 展平数据，保持按组分组的顺序
+    result = []
+    const sheetOrder = ['301', '302', '200', '500', '100']
+    for (const key of sheetOrder) {
+      if (grouped[key]) {
+        result.push(...grouped[key])
+      }
+    }
 
     gachaData = result
     state.status = 'loaded'
@@ -571,21 +590,80 @@ const fetchData = async (url) => {
     if (localData && localData.data && localData.data.length > 0) {
       state.log = '正在合并数据...'
 
-      // 按 ID 去重，保留新的
-      const localIds = new Set(localData.data.map(item => item.id))
-      const newOnly = result.filter(item => !localIds.has(item.id))
+      // 按类型分组数据
+      const localGrouped = {}
+      const newGrouped = {}
 
-      if (newOnly.length > 0) {
-        state.log = `新增 ${newOnly.length} 条记录`
-        mergedData = [...localData.data, ...newOnly]
+      for (const item of localData.data) {
+        const key = item.uigf_gacha_type
+        if (!localGrouped[key]) localGrouped[key] = []
+        localGrouped[key].push(item)
+      }
+
+      for (const item of result) {
+        const key = item.uigf_gacha_type
+        if (!newGrouped[key]) newGrouped[key] = []
+        newGrouped[key].push(item)
+      }
+
+      const mergedGrouped = {}
+
+      // 对每个类型分别进行合并
+      Object.keys(newGrouped).forEach(key => {
+        const newItems = newGrouped[key]
+        const localItems = localGrouped[key] || []
+
+        if (localItems.length === 0) {
+          // 没有本地数据，直接使用新数据
+          mergedGrouped[key] = newItems
+        } else {
+          // 转换为桌面版格式进行合并
+          const newArray = newItems.map(item => [
+            item.time, item.name, item.item_type, item.rank_type, item.gacha_type, item.id
+          ])
+          const localArray = localItems.map(item => [
+            item.time, item.name, item.item_type, item.rank_type, item.gacha_type, item.id
+          ])
+
+          // 应用桌面版的合并逻辑
+          const mergedArray = mergeArrays(localArray, newArray)
+
+          // 转换回对象格式
+          mergedGrouped[key] = mergedArray.map(arr => ({
+            time: arr[0],
+            name: arr[1],
+            item_type: arr[2],
+            rank_type: arr[3],
+            gacha_type: arr[4],
+            id: arr[5],
+            uigf_gacha_type: key,
+            uid: uid
+          }))
+        }
+      })
+
+      // 添加本地数据中存在但新数据中没有的类型
+      Object.keys(localGrouped).forEach(key => {
+        if (!mergedGrouped[key]) {
+          mergedGrouped[key] = localGrouped[key]
+        }
+      })
+
+      // 展平为数组，但保持每个类型内部的顺序
+      mergedData = Object.values(mergedGrouped).flat()
+
+      const newCount = mergedData.length - localData.data.length
+      if (newCount > 0) {
+        state.log = `新增 ${newCount} 条记录`
       } else {
         state.log = '数据已是最新'
-        mergedData = localData.data
       }
+    } else {
+      mergedData = result
     }
 
-    // 按时间排序
-    mergedData.sort((a, b) => new Date(a.time) - new Date(b.time))
+    // 移除全局排序，让每个类型在导出时单独排序
+    // mergedData.sort((a, b) => new Date(a.time) - new Date(b.time))
 
     gachaData = mergedData
     state.status = 'loaded'
@@ -662,8 +740,6 @@ const exportExcel = async () => {
       let total = 0
       let pity = 0
 
-      // 按时间排序
-      items.sort((a, b) => new Date(a.time) - new Date(b.time))
 
       for (const item of items) {
         total += 1
@@ -699,9 +775,6 @@ const exportExcel = async () => {
         logs
       }
     }
-
-    // 按时间排序所有行
-    allRows.sort((a, b) => a.time - b.time)
 
     // 创建工作簿
     const wb = XLSX.utils.book_new()

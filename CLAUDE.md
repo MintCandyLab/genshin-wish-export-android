@@ -116,8 +116,39 @@ yarn android:sync      # 同步到 Android 项目
 - `src/renderer/App-android.vue` - Android 版主组件
 - `src/renderer/main-android.js` - Android 入口文件
 - `src/renderer/utils/storage.js` - 存储适配层
+- `src/renderer/utils/gachaDetail.js` - 祈愿统计计算（与桌面版逻辑一致）
+- `src/renderer/components/PieChart.vue` - 饼图组件
+- `src/renderer/components/GachaDetail.vue` - 统计数据展示组件
 - `capacitor.config.json` - Capacitor 配置
 - `README-ANDROID.md` - Android 构建详细指南
+
+### Android 饼图统计功能
+
+Android 版本支持与桌面版相同的饼图分析和统计界面：
+
+**统计内容**：
+- 日期范围（最早/最晚祈愿时间）
+- 总抽数、未出5星抽数（新手祈愿不显示）
+- 星级分布：5星/4星/3星数量和百分比
+- 5星历史：角色名+抽取次数（彩色区分）
+- 平均出5星抽数
+
+**组件结构**：
+```
+App-android.vue
+├── PieChart.vue          # 饼图（5/4/3星分布）
+└── GachaDetail.vue       # 统计详情
+    ├── 日期范围
+    ├── 总抽数/未出5星
+    ├── 星级分布
+    └── 5星历史 + 平均抽数
+```
+
+**计算逻辑**（`gachaDetail.js`）：
+- 同时支持 Android 格式（对象数组）和桌面版格式（Map）
+- 遍历祈愿记录，统计各星级数量
+- 记录5星位置和抽数，计算平均抽数
+- 计算"未出5星抽数"（从上次出5星到现在的抽数）
 
 ## Development Notes
 

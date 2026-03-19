@@ -1,7 +1,7 @@
 <template>
   <div class="gacha-detail">
     <!-- 日期范围 -->
-    <p class="date-range" v-if="detail.date?.length === 2">
+    <p class="date-range" v-if="detail.date && detail.date[0] && detail.date[1]">
       <span>{{ formatDate(detail.date[0]) }}</span>
       <span class="mx-2">-</span>
       <span>{{ formatDate(detail.date[1]) }}</span>
@@ -11,32 +11,32 @@
     <div class="stats-summary">
       <div class="stat-item">
         <span class="stat-label">总抽数</span>
-        <span class="stat-value blue">{{ detail.total }}</span>
+        <span class="stat-value blue">{{ detail.total || 0 }}</span>
       </div>
-      <div class="stat-item" v-if="detail.countMio !== undefined">
+      <div class="stat-item" v-if="showCountMio">
         <span class="stat-label">未出5星</span>
-        <span class="stat-value green">{{ detail.countMio }}</span>
+        <span class="stat-value green">{{ detail.countMio || 0 }}</span>
       </div>
     </div>
 
     <!-- 星级统计 -->
     <div class="rarity-stats">
       <div class="rarity-item">
-        <span class="rarity-label yellow">五星: {{ detail.count5 }}</span>
+        <span class="rarity-label yellow">五星: {{ detail.count5 || 0 }}</span>
         <span class="rarity-percent">[{{ percent(detail.count5, detail.total) }}]</span>
       </div>
       <div class="rarity-item">
-        <span class="rarity-label purple">四星: {{ detail.count4 }}</span>
+        <span class="rarity-label purple">四星: {{ detail.count4 || 0 }}</span>
         <span class="rarity-percent">[{{ percent(detail.count4, detail.total) }}]</span>
       </div>
       <div class="rarity-item">
-        <span class="rarity-label blue">三星: {{ detail.count3 }}</span>
+        <span class="rarity-label blue">三星: {{ detail.count3 || 0 }}</span>
         <span class="rarity-percent">[{{ percent(detail.count3, detail.total) }}]</span>
       </div>
     </div>
 
     <!-- 五星历史记录 -->
-    <div class="ssr-history" v-if="detail.ssrPos?.length">
+    <div class="ssr-history" v-if="detail.ssrPos && detail.ssrPos.length > 0">
       <p class="history-title">
         历史:
         <span
@@ -57,40 +57,59 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
-  data: Object,
-  i18n: Object
+  data: {
+    type: Array,
+    required: true
+  },
+  i18n: {
+    type: Object,
+    default: () => ({})
+  }
 })
 
+// 提取祈愿类型和数据
+const gachaType = computed(() => props.data?.[0] || '')
 const detail = computed(() => props.data?.[1] || {})
 
-const computed = {
-  formatDate: (dateStr) => {
-    const date = new Date(dateStr)
-    return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`
-  },
-  percent: (num, total) => {
-    return `${Math.round(num / total * 10000) / 100}%`
-  },
-  avg5: (list) => {
-    let n = 0
-    list.forEach(item => {
-      n += item[1]
-    })
-    return parseInt((n / list.length) * 100) / 100
-  }
+// 是否显示未出5星（新手祈愿不显示）
+const showCountMio = computed(() => {
+  return gachaType.value !== '100' && detail.value.countMio !== undefined
+})
+
+// 格式化日期
+const formatDate = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`
 }
 
-const formatDate = computed.formatDate
-const percent = computed.percent
-const avg5 = computed.avg5
+// 计算百分比
+const percent = (num, total) => {
+  if (!total || total === 0) return '0%'
+  return `${Math.round(num / total * 10000) / 100}%`
+}
 
+// 计算平均5星抽数
+const avg5 = (list) => {
+  if (!list || list.length === 0) return 0
+  let n = 0
+  list.forEach(item => {
+    n += item[1]
+  })
+  return parseInt((n / list.length) * 100) / 100
+}
+
+// 颜色列表
 const colors = [
   '#5470c6', '#fac858', '#ee6666', '#73c0de', '#3ba272',
   '#fc8452', '#9a60b4', '#ea7ccc', '#2ab7ca', '#005b96',
   '#ff8b94', '#72a007', '#b60d1b', '#16570d'
 ]
 
+// 获取颜色
 const getColor = (index) => {
   return colors[index % colors.length]
 }
