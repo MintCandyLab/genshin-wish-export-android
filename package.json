@@ -24,7 +24,7 @@
     "postbuild:android": "mv dist/android/android.html dist/android/index.html 2>/dev/null || true",
     "android:sync": "npx cap sync android",
     "android:open": "npx cap open android",
-    "android:build:debug": "npm run build:android && npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:build:debug": "npm run build:android && npm run android:sync && pushd android && gradlew.bat assembleDebug && popd",
     "android:build:release": "npm run build:android && npm run android:sync && cd android && ./gradlew assembleRelease",
     "android": "npm run build:android && npm run android:sync && npm run android:open"
   },

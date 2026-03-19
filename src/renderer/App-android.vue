@@ -27,6 +27,16 @@
       </el-button>
 
       <el-button
+        type="warning"
+        icon="Share"
+        :disabled="!gachaData || gachaData.length === 0"
+        @click="shareGachaExcel"
+        class="action-btn"
+      >
+        分享 Excel
+      </el-button>
+
+      <el-button
         type="info"
         icon="Delete"
         :disabled="!gachaData || gachaData.length === 0"
@@ -235,36 +245,6 @@ const displayData = computed(() => {
     ...item,
     gacha_type_name: gachaTypeMap[item.uigf_gacha_type]?.name || item.uigf_gacha_type
   })).reverse()
-})
-
-// 按祈愿类型分组的详细统计数据
-const detailData = computed(() => {
-  if (!gachaData || gachaData.length === 0) return []
-
-  // 按祈愿类型分组
-  const grouped = {}
-  for (const item of gachaData) {
-    const key = item.uigf_gacha_type
-    if (!grouped[key]) grouped[key] = []
-    grouped[key].push(item)
-  }
-
-  // 为每个祈愿类型计算详细统计
-  const result = []
-  const sheetOrder = ['301', '302', '200', '500', '100']
-
-  for (const key of sheetOrder) {
-    const items = grouped[key]
-    if (!items || items.length === 0) continue
-
-    // 使用 gachaDetail 函数计算详细统计
-    const detail = gachaDetail(items)
-    if (detail) {
-      result.push([key, detail])
-    }
-  }
-
-  return result
 })
 
 // 按祈愿类型分组的详细统计数据
@@ -1060,6 +1040,602 @@ const exportExcel = async () => {
     console.error('导出 Excel 失败:', error)
     state.log = '导出失败: ' + error.message
     ElMessage.error('导出失败: ' + error.message)
+  }
+}
+
+// 分享 Excel
+const shareExcel = async () => {
+  if (!gachaData || gachaData.length === 0) {
+    ElMessage.warning('没有数据可分享')
+    return
+  }
+
+  try {
+    state.log = '正在生成 Excel...'
+
+    // 动态导入 xlsx-js-style 以支持样式
+    const XLSX = await import('xlsx-js-style')
+
+    // 颜色配置
+    const sheetColors = {
+      '角色活动祈愿': 'FFFF00',   // 黄色
+      '武器活动祈愿': '8AB8E6',   // 浅蓝色
+      '常驻祈愿': 'FFA500',       // 橙色
+      '集录祈愿': 'ADD8E6',       // 浅蓝
+      '新手祈愿': '90EE90'        // 浅绿
+    }
+    const totalHeaderColor = 'DBD7D3'
+    const rankColor = {
+      3: '8E8E8E',
+      4: 'A256E1',
+      5: 'BD6932'
+    }
+
+    // 祈愿类型顺序（用于控制sheet顺序）
+    const sheetOrder = ['301', '302', '200', '500', '100']  // 角色、武器、常驻、集录、新手
+
+    // 数据分组（按祈愿类型）
+    const groupedData = {}
+    for (const item of gachaData) {
+      const key = item.uigf_gacha_type
+      if (!groupedData[key]) groupedData[key] = []
+      groupedData[key].push(item)
+    }
+
+    // 处理每个分组的数据，计算total和pity
+    const processedData = {}
+    const allRows = []
+
+    // 确保为所有祈愿类型创建数据，即使没有记录
+    for (const key of sheetOrder) {
+      const typeInfo = gachaTypeMap[key]
+      if (!typeInfo) continue
+      const name = typeInfo.name
+      const items = groupedData[key] || []
+      const logs = []
+      let total = 0
+      let pity = 0
+
+
+      for (const item of items) {
+        total += 1
+        pity += 1
+
+        const log = [
+          item.time,
+          item.name,
+          item.item_type,
+          item.rank_type,
+          total,
+          pity,
+          '' // remark
+        ]
+
+        if (item.rank_type === 5) {
+          pity = 0
+        }
+
+        logs.push(log)
+
+        // 收集总表行
+        allRows.push({
+          row: log,
+          sheetName: name,
+          rank: item.rank_type,
+          time: new Date(item.time)
+        })
+      }
+
+      processedData[key] = {
+        name,
+        logs
+      }
+    }
+
+    // 创建工作簿
+    const wb = XLSX.utils.book_new()
+
+    // 表头
+    const headers = ['时间', '名称', '类型', '星级', '总次数', '保底内', '备注']
+    const wishTypeHeader = '祈愿类型'
+
+    // 辅助函数：添加统计行
+    const addStatisticsRowsXlsx = (sheetData, allRows, sheetColors) => {
+      const sheetOrder = ['角色活动祈愿', '武器活动祈愿', '常驻祈愿', '集录祈愿', '新手祈愿'];
+
+      // 按祈愿池分组
+      const groups = {};
+      allRows.forEach(item => {
+        const sheetName = item.sheetName;
+        if (!groups[sheetName]) groups[sheetName] = [];
+        groups[sheetName].push(item);
+      });
+
+      // 对每个组，按时间降序、total降序排序，取第一个
+      const latestBySheet = {};
+      Object.keys(groups).forEach(sheetName => {
+        const group = groups[sheetName];
+        if (group.length > 0) {
+          group.sort((a, b) => {
+            if (a.time > b.time) return -1;
+            if (a.time < b.time) return 1;
+            const totalA = parseInt(a.row[4], 10) || 0;
+            const totalB = parseInt(b.row[4], 10) || 0;
+            return totalB - totalA;
+          });
+          const latest = group[0];
+          latestBySheet[sheetName] = {
+            pity: latest.row[5],
+            rank: Number(latest.rank)
+          };
+        }
+      });
+
+      // 按固定顺序添加统计行
+      sheetOrder.forEach(sheetName => {
+        if (latestBySheet[sheetName]) {
+          const info = latestBySheet[sheetName];
+          const n = info.rank === 5 ? 0 : info.pity;
+          const text = `${sheetName} 已累计 ${n} 抽未出5星`;
+          sheetData.push([text, '', '', '', '', '', '', '']); // 8列，对应总表的列数
+        }
+      });
+    }
+
+    // 辅助函数：应用样式
+    const applySheetStyles = (sheet, sheetData, sheetColors, rankColor, headerColor, isTotalSheet, sheetName) => {
+      const range = XLSX.utils.decode_range(sheet['!ref'])
+
+      for (let row = range.s.r; row <= range.e.r; row++) {
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+          const cell = sheet[cellAddress]
+          if (!cell) continue
+
+          // 初始化样式
+          cell.s = cell.s || {}
+
+          if (row === 0) {
+            // 表头样式
+            cell.s.fill = {
+              fgColor: { rgb: headerColor ? headerColor.replace('#', '') : 'DBD7D3' }
+            }
+            cell.s.font = {
+              name: '微软雅黑',
+              color: { rgb: '757575' },
+              bold: true
+            }
+            cell.s.border = {
+              top: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              left: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              bottom: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              right: { style: 'thin', color: { rgb: 'C4C2BF' } }
+            }
+          } else {
+            // 数据行样式
+            const rowData = sheetData[row]
+            if (!rowData) continue
+
+            // 设置边框
+            cell.s.border = {
+              top: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              left: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              bottom: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              right: { style: 'thin', color: { rgb: 'C4C2BF' } }
+            }
+
+            let bgColor = 'EBEBEB'
+            let fontColor = '000000'
+            let isBold = false
+
+            if (isTotalSheet) {
+              // 总表样式
+              const wishType = rowData[rowData.length - 1] // 最后一列是祈愿类型
+              bgColor = sheetColors[wishType] || 'EBEBEB'
+
+              // 根据星级设置字体颜色
+              const rank = rowData[3] // 星级在第4列（索引3）
+              fontColor = rankColor[rank] || '000000'
+              isBold = rank !== 3
+            } else {
+              // 单个祈愿类型sheet样式
+              bgColor = sheetColors[sheetName] || 'EBEBEB'
+
+              // 根据星级设置字体颜色
+              const rank = rowData[3] // 星级在第4列（索引3）
+              fontColor = rankColor[rank] || '000000'
+              isBold = rank !== 3
+            }
+
+            cell.s.fill = {
+              fgColor: { rgb: bgColor }
+            }
+            cell.s.font = {
+              name: '微软雅黑',
+              color: { rgb: fontColor },
+              bold: isBold
+            }
+          }
+        }
+      }
+
+      // 设置列宽
+      sheet['!cols'] = [
+        { wch: 24 }, // 时间
+        { wch: 14 }, // 名称
+        { wch: 8 },  // 类型
+        { wch: 8 },  // 星级
+        { wch: 8 },  // 总次数
+        { wch: 8 },  // 保底内
+        { wch: 8 },  // 备注
+        { wch: 12 }  // 祈愿类型（总表）
+      ]
+    }
+
+    // 创建总表（不含3星）
+    const filteredRows = allRows.filter(item => item.rank !== 3)
+    const totalSheetData = [headers.concat([wishTypeHeader])]
+
+    for (const item of filteredRows) {
+      totalSheetData.push(item.row.concat([item.sheetName]))
+    }
+
+    // 添加统计行
+    addStatisticsRowsXlsx(totalSheetData, allRows, sheetColors)
+
+    const totalSheet = XLSX.utils.aoa_to_sheet(totalSheetData)
+    applySheetStyles(totalSheet, totalSheetData, sheetColors, rankColor, totalHeaderColor, true)
+    XLSX.utils.book_append_sheet(wb, totalSheet, '总表')
+
+    // 创建总表（含3星）
+    const totalSheetWith3StarData = [headers.concat([wishTypeHeader])]
+
+    for (const item of allRows) {
+      totalSheetWith3StarData.push(item.row.concat([item.sheetName]))
+    }
+
+    // 添加统计行
+    addStatisticsRowsXlsx(totalSheetWith3StarData, allRows, sheetColors)
+
+    const totalSheetWith3Star = XLSX.utils.aoa_to_sheet(totalSheetWith3StarData)
+    applySheetStyles(totalSheetWith3Star, totalSheetWith3StarData, sheetColors, rankColor, totalHeaderColor, true)
+    XLSX.utils.book_append_sheet(wb, totalSheetWith3Star, '总表（含3星）')
+
+    // 创建各祈愿类型的sheet（按照指定顺序）
+    for (const key of sheetOrder) {
+      const data = processedData[key]
+      if (!data) continue
+
+      const sheetData = [headers]
+      for (const log of data.logs) {
+        sheetData.push(log)
+      }
+
+      const sheet = XLSX.utils.aoa_to_sheet(sheetData)
+      applySheetStyles(sheet, sheetData, sheetColors, rankColor, null, false, data.name)
+      XLSX.utils.book_append_sheet(wb, sheet, data.name)
+    }
+
+    // 生成文件并保存
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', Props: { Author: 'Genshin Wish Export' } })
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+
+    // 保存到文件系统
+    const fileName = `原神抽卡记录_${new Date().toISOString().slice(0, 10)}.xlsx`
+    const base64Data = await Storage.blobToBase64(blob)
+
+    await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Documents
+    })
+
+    state.log = '导出成功'
+    ElMessage.success(`导出成功: ${fileName}`)
+
+  } catch (error) {
+    console.error('导出 Excel 失败:', error)
+    state.log = '导出失败: ' + error.message
+    ElMessage.error('导出失败: ' + error.message)
+  }
+}
+
+// 分享 Excel
+const shareGachaExcel = async () => {
+  if (!gachaData || gachaData.length === 0) {
+    ElMessage.warning('没有数据可分享')
+    return
+  }
+
+  try {
+    state.log = '正在生成 Excel...'
+
+    // 动态导入 xlsx-js-style 以支持样式
+    const XLSX = await import('xlsx-js-style')
+
+    // 颜色配置
+    const sheetColors = {
+      '角色活动祈愿': 'FFFF00',   // 黄色
+      '武器活动祈愿': '8AB8E6',   // 浅蓝色
+      '常驻祈愿': 'FFA500',       // 橙色
+      '集录祈愿': 'ADD8E6',       // 浅蓝
+      '新手祈愿': '90EE90'        // 浅绿
+    }
+    const totalHeaderColor = 'DBD7D3'
+    const rankColor = {
+      3: '8E8E8E',
+      4: 'A256E1',
+      5: 'BD6932'
+    }
+
+    // 祈愿类型顺序（用于控制sheet顺序）
+    const sheetOrder = ['301', '302', '200', '500', '100']  // 角色、武器、常驻、集录、新手
+
+    // 数据分组（按祈愿类型）
+    const groupedData = {}
+    for (const item of gachaData) {
+      const key = item.uigf_gacha_type
+      if (!groupedData[key]) groupedData[key] = []
+      groupedData[key].push(item)
+    }
+
+    // 处理每个分组的数据，计算total和pity
+    const processedData = {}
+    const allRows = []
+
+    // 确保为所有祈愿类型创建数据，即使没有记录
+    for (const key of sheetOrder) {
+      const typeInfo = gachaTypeMap[key]
+      if (!typeInfo) continue
+      const name = typeInfo.name
+      const items = groupedData[key] || []
+      const logs = []
+      let total = 0
+      let pity = 0
+
+      for (const item of items) {
+        total += 1
+        pity += 1
+
+        const log = [
+          item.time,
+          item.name,
+          item.item_type,
+          item.rank_type,
+          total,
+          pity,
+          '' // remark
+        ]
+
+        if (item.rank_type === 5) {
+          pity = 0
+        }
+
+        logs.push(log)
+
+        // 收集总表行
+        allRows.push({
+          row: log,
+          sheetName: name,
+          rank: item.rank_type,
+          time: new Date(item.time)
+        })
+      }
+
+      processedData[key] = {
+        name,
+        logs
+      }
+    }
+
+    // 创建工作簿
+    const wb = XLSX.utils.book_new()
+
+    // 表头
+    const headers = ['时间', '名称', '类型', '星级', '总次数', '保底内', '备注']
+    const wishTypeHeader = '祈愿类型'
+
+    // 辅助函数：添加统计行
+    const addStatisticsRowsXlsx = (sheetData, allRows, sheetColors) => {
+      const sheetOrder = ['角色活动祈愿', '武器活动祈愿', '常驻祈愿', '集录祈愿', '新手祈愿'];
+
+      // 按祈愿池分组
+      const groups = {};
+      allRows.forEach(item => {
+        const sheetName = item.sheetName;
+        if (!groups[sheetName]) groups[sheetName] = [];
+        groups[sheetName].push(item);
+      });
+
+      // 对每个组，按时间降序、total降序排序，取第一个
+      const latestBySheet = {};
+      Object.keys(groups).forEach(sheetName => {
+        const group = groups[sheetName];
+        if (group.length > 0) {
+          group.sort((a, b) => {
+            if (a.time > b.time) return -1;
+            if (a.time < b.time) return 1;
+            const totalA = parseInt(a.row[4], 10) || 0;
+            const totalB = parseInt(b.row[4], 10) || 0;
+            return totalB - totalA;
+          });
+          const latest = group[0];
+          latestBySheet[sheetName] = {
+            pity: latest.row[5],
+            rank: Number(latest.rank)
+          };
+        }
+      });
+
+      // 按固定顺序添加统计行
+      sheetOrder.forEach(sheetName => {
+        if (latestBySheet[sheetName]) {
+          const info = latestBySheet[sheetName];
+          const n = info.rank === 5 ? 0 : info.pity;
+          const text = `${sheetName} 已累计 ${n} 抽未出5星`;
+          sheetData.push([text, '', '', '', '', '', '', '']); // 8列，对应总表的列数
+        }
+      });
+    }
+
+    // 辅助函数：应用样式
+    const applySheetStyles = (sheet, sheetData, sheetColors, rankColor, headerColor, isTotalSheet, sheetName) => {
+      const range = XLSX.utils.decode_range(sheet['!ref'])
+
+      for (let row = range.s.r; row <= range.e.r; row++) {
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+          const cell = sheet[cellAddress]
+          if (!cell) continue
+
+          // 初始化样式
+          cell.s = cell.s || {}
+
+          if (row === 0) {
+            // 表头样式
+            cell.s.fill = {
+              fgColor: { rgb: headerColor ? headerColor.replace('#', '') : 'DBD7D3' }
+            }
+            cell.s.font = {
+              name: '微软雅黑',
+              color: { rgb: '757575' },
+              bold: true
+            }
+            cell.s.border = {
+              top: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              left: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              bottom: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              right: { style: 'thin', color: { rgb: 'C4C2BF' } }
+            }
+          } else {
+            // 数据行样式
+            const rowData = sheetData[row]
+            if (!rowData) continue
+
+            // 设置边框
+            cell.s.border = {
+              top: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              left: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              bottom: { style: 'thin', color: { rgb: 'C4C2BF' } },
+              right: { style: 'thin', color: { rgb: 'C4C2BF' } }
+            }
+
+            let bgColor = 'EBEBEB'
+            let fontColor = '000000'
+            let isBold = false
+
+            if (isTotalSheet) {
+              // 总表样式
+              const wishType = rowData[rowData.length - 1] // 最后一列是祈愿类型
+              bgColor = sheetColors[wishType] || 'EBEBEB'
+
+              // 根据星级设置字体颜色
+              const rank = rowData[3] // 星级在第4列（索引3）
+              fontColor = rankColor[rank] || '000000'
+              isBold = rank !== 3
+            } else {
+              // 单个祈愿类型sheet样式
+              bgColor = sheetColors[sheetName] || 'EBEBEB'
+
+              // 根据星级设置字体颜色
+              const rank = rowData[3] // 星级在第4列（索引3）
+              fontColor = rankColor[rank] || '000000'
+              isBold = rank !== 3
+            }
+
+            cell.s.fill = {
+              fgColor: { rgb: bgColor }
+            }
+            cell.s.font = {
+              name: '微软雅黑',
+              color: { rgb: fontColor },
+              bold: isBold
+            }
+          }
+        }
+      }
+
+      // 设置列宽
+      sheet['!cols'] = [
+        { wch: 24 }, // 时间
+        { wch: 14 }, // 名称
+        { wch: 8 },  // 类型
+        { wch: 8 },  // 星级
+        { wch: 8 },  // 总次数
+        { wch: 8 },  // 保底内
+        { wch: 8 },  // 备注
+        { wch: 12 }  // 祈愿类型（总表）
+      ]
+    }
+
+    // 创建总表（不含3星）
+    const filteredRows = allRows.filter(item => item.rank !== 3)
+    const totalSheetData = [headers.concat([wishTypeHeader])]
+
+    for (const item of filteredRows) {
+      totalSheetData.push(item.row.concat([item.sheetName]))
+    }
+
+    // 添加统计行
+    addStatisticsRowsXlsx(totalSheetData, allRows, sheetColors)
+
+    const totalSheet = XLSX.utils.aoa_to_sheet(totalSheetData)
+    applySheetStyles(totalSheet, totalSheetData, sheetColors, rankColor, totalHeaderColor, true)
+    XLSX.utils.book_append_sheet(wb, totalSheet, '总表')
+
+    // 创建总表（含3星）
+    const totalSheetWith3StarData = [headers.concat([wishTypeHeader])]
+
+    for (const item of allRows) {
+      totalSheetWith3StarData.push(item.row.concat([item.sheetName]))
+    }
+
+    // 添加统计行
+    addStatisticsRowsXlsx(totalSheetWith3StarData, allRows, sheetColors)
+
+    const totalSheetWith3Star = XLSX.utils.aoa_to_sheet(totalSheetWith3StarData)
+    applySheetStyles(totalSheetWith3Star, totalSheetWith3StarData, sheetColors, rankColor, totalHeaderColor, true)
+    XLSX.utils.book_append_sheet(wb, totalSheetWith3Star, '总表（含3星）')
+
+    // 创建各祈愿类型的sheet（按照指定顺序）
+    for (const key of sheetOrder) {
+      const data = processedData[key]
+      if (!data) continue
+
+      const sheetData = [headers]
+      for (const log of data.logs) {
+        sheetData.push(log)
+      }
+
+      const sheet = XLSX.utils.aoa_to_sheet(sheetData)
+      applySheetStyles(sheet, sheetData, sheetColors, rankColor, null, false, data.name)
+      XLSX.utils.book_append_sheet(wb, sheet, data.name)
+    }
+
+    // 生成文件
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', Props: { Author: 'Genshin Wish Export' } })
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+
+    // 分享文件
+    const fileName = `原神抽卡记录_${new Date().toISOString().slice(0, 10)}.xlsx`
+    const base64Data = await Storage.blobToBase64(blob)
+
+    await Share.share({
+      title: '原神抽卡记录',
+      text: '分享我的原神抽卡数据',
+      files: [`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64Data}`],
+      dialogTitle: '分享抽卡记录'
+    })
+
+    state.log = '分享成功'
+    ElMessage.success('分享成功')
+
+  } catch (error) {
+    console.error('分享 Excel 失败:', error)
+    if (error.message !== 'Share canceled') {
+      state.log = '分享失败: ' + error.message
+      ElMessage.error('分享失败: ' + error.message)
+    }
   }
 }
 
