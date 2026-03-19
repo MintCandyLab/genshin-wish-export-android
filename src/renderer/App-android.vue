@@ -56,11 +56,6 @@
 
     <!-- 统计信息展示 -->
     <div v-if="gachaData && gachaData.length > 0" class="stats-container">
-      <div class="stats-overview">
-        <h3 class="stats-title">祈愿统计</h3>
-        <p class="stats-summary">包含所有祈愿类型的抽卡统计与历史数据</p>
-      </div>
-
       <div v-for="(item, index) in detailData" :key="index" class="stats-card">
         <div class="stats-header">
           <div class="stats-title-wrap">
