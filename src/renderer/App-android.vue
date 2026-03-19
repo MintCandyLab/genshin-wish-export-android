@@ -62,6 +62,23 @@
       <p class="table-hint">* 仅显示最近 10 条，导出后将包含全部数据</p>
     </div>
 
+    <!-- 统计信息展示 -->
+    <div v-if="gachaData && gachaData.length > 0" class="stats-container">
+      <h3 class="stats-title">祈愿统计</h3>
+      <div v-for="(item, index) in detailData" :key="index" class="stats-card">
+        <div class="stats-header">
+          <h4>{{ gachaTypeMap[item[0]]?.name || item[0] }}</h4>
+          <span class="total-count">共 {{ item[1].total }} 抽</span>
+        </div>
+
+        <div class="chart-container">
+          <PieChart :data="item" :i18n="i18nData" />
+        </div>
+
+        <GachaDetail :data="item" :i18n="i18nData" />
+      </div>
+    </div>
+
     <!-- URL/JSON 导入选择对话框 -->
     <el-dialog
       v-model="state.showUrlDlg"
@@ -157,9 +174,13 @@ import { reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import Storage from './utils/storage.js'
 import i18nData from '../i18n/简体中文.json'
 import { version } from '../../package.json'
+import PieChart from './components/PieChart.vue'
+import GachaDetail from './components/GachaDetail.vue'
+import { gachaDetail } from './utils/gachaDetail.js'
 
 const state = reactive({
   status: 'init', // init, loading, loaded, failed
@@ -214,6 +235,66 @@ const displayData = computed(() => {
     ...item,
     gacha_type_name: gachaTypeMap[item.uigf_gacha_type]?.name || item.uigf_gacha_type
   })).reverse()
+})
+
+// 按祈愿类型分组的详细统计数据
+const detailData = computed(() => {
+  if (!gachaData || gachaData.length === 0) return []
+
+  // 按祈愿类型分组
+  const grouped = {}
+  for (const item of gachaData) {
+    const key = item.uigf_gacha_type
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(item)
+  }
+
+  // 为每个祈愿类型计算详细统计
+  const result = []
+  const sheetOrder = ['301', '302', '200', '500', '100']
+
+  for (const key of sheetOrder) {
+    const items = grouped[key]
+    if (!items || items.length === 0) continue
+
+    // 使用 gachaDetail 函数计算详细统计
+    const detail = gachaDetail(items)
+    if (detail) {
+      result.push([key, detail])
+    }
+  }
+
+  return result
+})
+
+// 按祈愿类型分组的详细统计数据
+const detailData = computed(() => {
+  if (!gachaData || gachaData.length === 0) return []
+
+  // 按祈愿类型分组
+  const grouped = {}
+  for (const item of gachaData) {
+    const key = item.uigf_gacha_type
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(item)
+  }
+
+  // 为每个祈愿类型计算详细统计
+  const result = []
+  const sheetOrder = ['301', '302', '200', '500', '100']
+
+  for (const key of sheetOrder) {
+    const items = grouped[key]
+    if (!items || items.length === 0) continue
+
+    // 使用 gachaDetail 函数计算详细统计
+    const detail = gachaDetail(items)
+    if (detail) {
+      result.push([key, detail])
+    }
+  }
+
+  return result
 })
 
 // 获取星级标签类型

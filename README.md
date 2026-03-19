@@ -1,6 +1,6 @@
-# 原神抽卡导出工具 - Android 版
+# Android 版本构建指南
 
-基于 [biuuu/genshin-wish-export](https://github.com/biuuu/genshin-wish-export) 移植到 Android 平台。
+本文档说明如何构建和运行原神抽卡导出工具的 Android 版本。
 
 ## 功能特性
 
@@ -13,23 +13,12 @@
   - 保底统计行
 - **饼图分析**: 每个祈愿类型的可视化饼图统计（5星/4星/3星分布）
 - **祈愿统计**: 详细的祈愿数据分析
-  - 日期范围
-  - 总抽数、未出5星抽数
+  - 日期范围、总抽数、未出5星抽数
   - 5星/4星/3星分布及百分比
   - 5星历史记录（角色名+抽数）
   - 平均出5星抽数
 
-## 技术方案
-
-使用 Capacitor 将 Vue 3 前端应用打包为 Android 应用：
-
-- **框架**: Capacitor 5.x + Vue 3
-- **HTTP**: CapacitorHttp (替代 electron-fetch)
-- **存储**: Capacitor Preferences + Filesystem
-- **Excel**: xlsx.js (浏览器版替代 exceljs)
-- **图表**: ECharts 5.x
-
-## 构建环境要求
+## 环境要求
 
 1. Node.js 16+
 2. Android Studio (最新稳定版)
@@ -50,9 +39,10 @@ src/renderer/
 └── utils/
     ├── storage.js          # 存储适配层
     └── gachaDetail.js      # 祈愿统计计算
+capacitor.config.json       # Capacitor 配置
 ```
 
-## 构建步骤
+## 快速开始
 
 ### 1. 安装依赖
 
@@ -63,7 +53,7 @@ yarn install
 ### 2. 构建 Android 版本
 
 ```bash
-# 一键构建
+# 一键构建（推荐）
 yarn android
 
 # 或分步执行
@@ -72,18 +62,48 @@ yarn android:sync      # 同步到 Android 项目
 yarn android:open      # 在 Android Studio 中打开
 ```
 
-### 3. 在 Android Studio 中构建 APK
+### 3. 运行应用
 
+**方式一：Android Studio**
 1. 使用 Android Studio 打开 `android/` 目录
 2. 等待 Gradle 同步完成
-3. 点击 **Build > Build Bundle(s) / APK(s) > Build APK(s)**
-4. 或使用 **Run** 按钮在模拟器/真机上运行
+3. 点击 **Run** 按钮在模拟器或真机上运行
 
-APK 文件位置：`android/app/build/outputs/apk/debug/app-debug.apk`
+**方式二：命令行**
+```bash
+cd android
+./gradlew installDebug  # 安装到连接的设备
+```
 
-## 功能差异
+## 构建 APK
 
-与 PC 版相比，Android 版本有以下差异：
+### 调试版 APK
+
+```bash
+# 命令行方式
+cd android
+./gradlew assembleDebug
+
+# 或在 Android Studio 中：Build > Build Bundle(s) / APK(s) > Build APK(s)
+```
+
+输出位置：`android/app/build/outputs/apk/debug/app-debug.apk`
+
+### 发布版 APK
+
+```bash
+# 命令行方式
+cd android
+./gradlew assembleRelease
+
+# 或在 Android Studio 中构建
+```
+
+输出位置：`android/app/build/outputs/apk/release/app-release-unsigned.apk`
+
+**注意**：发布版需要签名才能安装到设备上。可以使用 `jarsigner` 工具签名，或在 Android Studio 中配置签名密钥。
+
+## 与 PC 版的功能差异
 
 | 功能 | PC 版 | Android 版 |
 |------|-------|-----------|
@@ -122,13 +142,20 @@ HoYoGet 下载地址：https://www.wyylkjs.com/HoYoGet/
 ## 常见问题
 
 **Q: 为什么 Android 版不能自动获取游戏数据？**
-A: Android 系统限制应用访问其他应用的私有数据，无法像 PC 版那样读取游戏日志文件。
+A: Android 系统限制应用访问其他应用的私有数据，无法像 PC 版那样读取游戏日志文件。详细说明见上方"为什么 Android 版不能自动获取数据"部分。
 
 **Q: 导出的 Excel 文件保存在哪里？**
 A: 保存在设备的"文档"目录中，可以通过文件管理器找到。
 
 **Q: 饼图统计显示的数据准确吗？**
-A: 饼图统计使用与 PC 版相同的计算逻辑，数据准确可靠。
+A: 饼图统计使用与 PC 版相同的计算逻辑，数据准确可靠。统计包括：星级分布、5星历史、平均抽数等。
+
+**Q: 构建失败怎么办？**
+A: 请检查：
+1. Node.js 版本是否为 16+
+2. Android SDK 是否安装完整（API 33+）
+3. Java JDK 是否为 11+
+4. 是否运行了 `yarn install` 安装依赖
 
 **Q: 支持 iOS 吗？**
 A: 当前配置主要是 Android，但 Capacitor 也支持 iOS，需要额外的配置和 Apple 开发者账号。
