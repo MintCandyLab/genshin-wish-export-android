@@ -9,7 +9,9 @@
       "Bash(yarn android:sync)",
       "Bash(yarn build:android)",
       "WebSearch",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(cat:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

@@ -19,7 +19,7 @@
       <el-button
         type="success"
         icon="Download"
-        :disabled="!gachaData || gachaData.length === 0"
+        :disabled="!hasData"
         @click="exportExcel"
         class="action-btn"
       >
@@ -29,8 +29,8 @@
       <el-button
         type="warning"
         icon="Share"
-        :disabled="!gachaData || gachaData.length === 0"
-        @click="shareGachaExcel"
+        :disabled="!hasData"
+        @click="shareExcel"
         class="action-btn"
       >
         分享 Excel
@@ -39,7 +39,7 @@
       <el-button
         type="info"
         icon="Delete"
-        :disabled="!gachaData || gachaData.length === 0"
+        :disabled="!hasData"
         @click="clearData"
         class="action-btn"
       >
@@ -56,11 +56,11 @@
     </div>
 
     <!-- 统计信息展示 -->
-    <div v-if="gachaData && gachaData.length > 0" class="stats-container">
+    <div v-if="hasData" class="stats-container">
       <div v-for="(item, index) in detailData" :key="index" class="stats-card">
         <div class="stats-header">
           <div class="stats-title-wrap">
-            <h4 class="stats-type">{{ gachaTypeMap[item[0]]?.name || item[0] }}</h4>
+            <h4 class="stats-type">{{ gachaTypeMap.get(item[0]) || item[0] }}</h4>
             <span class="total-count">共 {{ item[1].total }} 抽</span>
           </div>
         </div>
@@ -186,17 +186,18 @@ const state = reactive({
   saveDirectoryInfo: '' // 保存目录信息
 })
 
-// 祈愿数据存储
-let gachaData = []
+// 祈愿数据存储 - 与桌面版一致的数据结构
+// currentData = { result: Map<key, logs>, typeMap: Map<key, name>, uid, lang, time }
+let currentData = null
 
-// 祈愿类型映射
-const gachaTypeMap = {
-  '301': { name: '角色活动祈愿', key: '301' },
-  '302': { name: '武器活动祈愿', key: '302' },
-  '200': { name: '常驻祈愿', key: '200' },
-  '500': { name: '集录祈愿', key: '500' },
-  '100': { name: '新手祈愿', key: '100' }
-}
+// 祈愿类型映射 - 与桌面版一致
+const gachaTypeMap = new Map([
+  ['301', '角色活动祈愿'],
+  ['302', '武器活动祈愿'],
+  ['200', '常驻祈愿'],
+  ['500', '集录祈愿'],
+  ['100', '新手祈愿']
+])
 
 // UI 文本
 const ui = computed(() => i18nData.ui)
@@ -223,38 +224,53 @@ const statusType = computed(() => {
   return typeMap[state.status] || 'info'
 })
 
+// 判断是否有数据的辅助函数
+const hasData = computed(() => {
+  if (!currentData || !currentData.result) return false
+  for (const logs of currentData.result.values()) {
+    if (logs.length > 0) return true
+  }
+  return false
+})
+
 // 表格显示数据（仅显示最近10条）
 const displayData = computed(() => {
-  if (!gachaData || gachaData.length === 0) return []
-  return gachaData.slice(-10).map(item => ({
+  if (!currentData || !currentData.result) return []
+
+  // 将所有数据展平并按时间排序
+  const allData = []
+  for (const [key, logs] of currentData.result) {
+    for (const log of logs) {
+      allData.push({
+        time: log[0],
+        name: log[1],
+        item_type: log[2],
+        rank_type: log[3],
+        gacha_type: log[4],
+        uigf_gacha_type: key
+      })
+    }
+  }
+
+  return allData.slice(-10).map(item => ({
     ...item,
-    gacha_type_name: gachaTypeMap[item.uigf_gacha_type]?.name || item.uigf_gacha_type
+    gacha_type_name: gachaTypeMap.get(item.uigf_gacha_type) || item.uigf_gacha_type
   })).reverse()
 })
 
 // 按祈愿类型分组的详细统计数据
 const detailData = computed(() => {
-  if (!gachaData || gachaData.length === 0) return []
+  if (!currentData || !currentData.result) return []
 
-  // 按祈愿类型分组
-  const grouped = {}
-  for (const item of gachaData) {
-    const key = item.uigf_gacha_type
-    if (!grouped[key]) grouped[key] = []
-    grouped[key].push(item)
-  }
-
-  // 为每个祈愿类型计算详细统计
+  // 使用 gachaDetail 函数计算详细统计
+  // gachaDetail 返回 Map<key, detail>，需要转换为 [[key, detail], ...]
+  const detailMap = gachaDetail(currentData.result)
   const result = []
   const sheetOrder = ['301', '302', '500', '200', '100']
 
   for (const key of sheetOrder) {
-    const items = grouped[key]
-    if (!items || items.length === 0) continue
-
-    // 使用 gachaDetail 函数计算详细统计
-    const detail = gachaDetail(items)
-    if (detail) {
+    const detail = detailMap.get(key)
+    if (detail && detail.total > 0) {
       result.push([key, detail])
     }
   }
@@ -319,58 +335,56 @@ const processImportData = async (importData) => {
     state.status = 'loading'
     state.log = '正在解析数据...'
 
-    let result = []
+    let parsedData = null
+    let uid = null
 
     // 检测 JSON 格式
     if (importData.list && importData.info) {
       // UIGF v3.0 格式
       state.log = '检测到 UIGF v3.0 格式'
-      result = parseUigf30Data(importData)
+      const result = parseUigf30Data(importData)
+      uid = result[0]?.uid
+      parsedData = convertToDesktopFormat(result, uid)
     } else if (importData.hk4e && importData.info?.version) {
       // UIGF v4.1 格式
       state.log = '检测到 UIGF v4.1 格式'
-      result = parseUigf41Data(importData)
+      const result = parseUigf41Data(importData)
+      uid = result[0]?.uid
+      parsedData = convertToDesktopFormat(result, uid)
     } else if (importData.result && importData.uid) {
-      // 本地数据格式
+      // 本地数据格式（桌面版格式）
       state.log = '检测到本地数据格式'
-      result = parseLocalData(importData)
+      parsedData = parseLocalData(importData)
+      uid = parsedData.uid
     } else {
       throw new Error('不支持的 JSON 格式')
     }
 
-    // 按 uigf_gacha_type 分组，然后每组内按时间排序（与桌面版逻辑一致）
-    const grouped = {}
-    for (const item of result) {
-      const key = item.uigf_gacha_type
-      if (!grouped[key]) grouped[key] = []
-      grouped[key].push(item)
+    // 获取本地数据并合并（如果存在）
+    const localData = await Storage.get('gachaData', null)
+    if (localData && localData.data && localData.data.result) {
+      state.log = '正在合并数据...'
+      parsedData = mergeDesktopData(localData.data, parsedData)
     }
 
-    // 每组内按时间排序
-    Object.keys(grouped).forEach(key => {
-      grouped[key].sort((a, b) => new Date(a.time) - new Date(b.time))
-    })
-
-    // 展平数据，保持按组分组的顺序
-    result = []
-    const sheetOrder = ['301', '302', '500', '200', '100']
-    for (const key of sheetOrder) {
-      if (grouped[key]) {
-        result.push(...grouped[key])
-      }
-    }
-
-    gachaData = result
+    currentData = parsedData
     state.status = 'loaded'
-    state.log = `成功导入 ${result.length} 条记录`
+
+    // 计算总记录数
+    let totalRecords = 0
+    for (const logs of currentData.result.values()) {
+      totalRecords += logs.length
+    }
+
+    state.log = `成功导入 ${totalRecords} 条记录`
     state.showUrlDlg = false
     state.selectedFileName = ''
 
-    ElMessage.success(`成功导入 ${result.length} 条记录`)
+    ElMessage.success(`成功导入 ${totalRecords} 条记录`)
 
-    // 保存到本地存储
+    // 保存到本地存储（序列化 Map 为数组）
     await Storage.set('gachaData', {
-      data: result,
+      data: serializeCurrentData(currentData),
       time: Date.now()
     })
 
@@ -418,23 +432,125 @@ const parseUigf41Data = (data) => {
   return result
 }
 
-// 解析本地数据格式
+// 解析本地数据格式（新格式：桌面版 Map 结构）
 const parseLocalData = (data) => {
-  const result = []
-  for (const [gachaType, items] of data.result) {
-    for (const item of items) {
-      result.push({
-        time: item[0],
-        name: item[1],
-        item_type: item[2],
-        rank_type: parseInt(item[3]),
-        gacha_type: item[4],
-        id: item[5],
-        uigf_gacha_type: gachaType
-      })
+  // 返回当前数据格式，与桌面版一致
+  return {
+    result: data.result,
+    typeMap: data.typeMap || new Map([
+      ['301', '角色活动祈愿'],
+      ['302', '武器活动祈愿'],
+      ['200', '常驻祈愿'],
+      ['500', '集录祈愿'],
+      ['100', '新手祈愿']
+    ]),
+    uid: data.uid,
+    lang: data.lang || 'zh-cn',
+    time: data.time
+  }
+}
+
+// 将 UIGF 格式的数据转换为桌面版格式
+const convertToDesktopFormat = (items, uid) => {
+  const result = new Map()
+  const typeMap = new Map([
+    ['301', '角色活动祈愿'],
+    ['302', '武器活动祈愿'],
+    ['200', '常驻祈愿'],
+    ['500', '集录祈愿'],
+    ['100', '新手祈愿']
+  ])
+
+  // 初始化所有类型的空数组
+  for (const key of typeMap.keys()) {
+    result.set(key, [])
+  }
+
+  // 按类型分组
+  for (const item of items) {
+    const key = item.uigf_gacha_type || item.gacha_type
+    if (!result.has(key)) {
+      result.set(key, [])
+    }
+    const logs = result.get(key)
+    logs.push([
+      item.time,
+      item.name,
+      item.item_type,
+      parseInt(item.rank_type),
+      item.gacha_type,
+      item.id
+    ])
+  }
+
+  // 每组内按时间排序
+  for (const [key, logs] of result) {
+    logs.sort((a, b) => new Date(a[0]) - new Date(b[0]))
+  }
+
+  return {
+    result,
+    typeMap,
+    uid: uid || items[0]?.uid,
+    lang: 'zh-cn',
+    time: Date.now()
+  }
+}
+
+// 合并桌面版格式的数据
+const mergeDesktopData = (localData, newData) => {
+  const mergedResult = new Map()
+
+  // 获取所有可能的 key
+  const allKeys = new Set([
+    ...localData.result.keys(),
+    ...newData.result.keys()
+  ])
+
+  for (const key of allKeys) {
+    const localLogs = localData.result.get(key) || []
+    const newLogs = newData.result.get(key) || []
+
+    if (localLogs.length === 0) {
+      mergedResult.set(key, newLogs)
+    } else if (newLogs.length === 0) {
+      mergedResult.set(key, localLogs)
+    } else {
+      // 使用桌面版的 mergeArrays 逻辑
+      const merged = mergeArrays(localLogs, newLogs)
+      mergedResult.set(key, merged)
     }
   }
-  return result
+
+  return {
+    result: mergedResult,
+    typeMap: localData.typeMap || newData.typeMap,
+    uid: newData.uid || localData.uid,
+    lang: localData.lang || newData.lang,
+    time: Date.now()
+  }
+}
+
+// 序列化当前数据（将 Map 转换为可存储的格式）
+const serializeCurrentData = (data) => {
+  return {
+    result: Array.from(data.result.entries()),
+    typeMap: Array.from(data.typeMap.entries()),
+    uid: data.uid,
+    lang: data.lang,
+    time: data.time
+  }
+}
+
+// 反序列化数据（从存储恢复 Map 格式）
+const deserializeCurrentData = (data) => {
+  return {
+    result: new Map(data.result),
+    typeMap: new Map(data.typeMap),
+    uid: data.uid,
+    lang: data.lang,
+    time: data.time
+  }
 }
 
 // 确认获取数据
