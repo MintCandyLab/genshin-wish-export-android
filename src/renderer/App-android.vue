@@ -1223,12 +1223,19 @@ const shareExcel = async () => {
 
     // 分享文件
     const fileName = `原神抽卡记录_${new Date().toISOString().slice(0, 10)}.xlsx`
-    const base64Data = await Storage.blobToBase64(blob)
+    
+    // 先保存文件到设备
+    const saveResult = await Storage.saveFile(fileName, blob, 'Documents')
+    
+    if (!saveResult.success) {
+      throw new Error('保存文件失败: ' + saveResult.error)
+    }
 
+    // 使用保存后的文件URI进行分享
     await Share.share({
       title: '原神抽卡记录',
       text: '分享我的原神抽卡数据',
-      files: [`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64Data}`],
+      files: [saveResult.uri],
       dialogTitle: '分享抽卡记录'
     })
 
