@@ -1143,7 +1143,7 @@ const exportExcel = async () => {
     const result = await Storage.saveFile(fileName, blob, 'Documents')
 
     if (result.success) {
-      state.log = `已保存: ${fileName}`
+      state.log = `已保存: ${result.directoryPath}/${fileName}`
       ElMessage.success(`导出成功！已保存到 ${result.directoryPath}: ${fileName}`)
     } else {
       throw new Error(result.error || '保存失败')
@@ -1481,6 +1481,20 @@ onMounted(async () => {
   height: 48px;
   font-size: 16px;
   margin-bottom: 12px;
+}
+
+/* 选择JSON文件按钮 - 使用深蓝色确保文字清晰 */
+:deep(.file-picker-btn.el-button--primary) {
+  background-color: #1677ff;
+  border-color: #1677ff;
+  color: #ffffff;
+}
+
+/* 获取数据按钮 - 使用深蓝色确保文字清晰 */
+:deep(.dialog-footer .el-button--primary) {
+  background-color: #1677ff;
+  border-color: #1677ff;
+  color: #ffffff;
 }
 
 .selected-file {
