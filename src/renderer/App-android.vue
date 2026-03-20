@@ -173,7 +173,7 @@ import i18nData from '../i18n/简体中文.json'
 import { version } from '../../package.json'
 import PieChart from './components/PieChart.vue'
 import GachaDetail from './components/GachaDetail.vue'
-import { gachaDetail } from './utils/gachaDetail.js'
+import gachaDetail from './utils/gachaDetail.js'
 
 const state = reactive({
   status: 'init', // init, loading, loaded, failed
@@ -431,9 +431,11 @@ const processImportData = async (importData) => {
   }
 }
 
-// 解析 UIGF v3.0 格式
+// 解析 UIGF v3.0 格式 - 与桌面版一致，按 id 排序
 const parseUigf30Data = (data) => {
   const result = []
+  // 按 id 大小排序，与桌面版一致
+  data.list.sort((a, b) => parseInt(BigInt(a.id) - BigInt(b.id)))
   for (const item of data.list) {
     result.push({
       time: item.time,
@@ -448,10 +450,12 @@ const parseUigf30Data = (data) => {
   return result
 }
 
-// 解析 UIGF v4.1 格式
+// 解析 UIGF v4.1 格式 - 与桌面版一致，按 id 排序
 const parseUigf41Data = (data) => {
   const result = []
   for (const account of data.hk4e) {
+    // 按 id 大小排序，与桌面版一致
+    account.list.sort((a, b) => parseInt(BigInt(a.id) - BigInt(b.id)))
     for (const item of account.list) {
       result.push({
         time: item.time,
@@ -518,10 +522,8 @@ const convertToDesktopFormat = (items, uid) => {
     ])
   }
 
-  // 每组内按时间排序
-  for (const [key, logs] of result) {
-    logs.sort((a, b) => new Date(a[0]) - new Date(b[0]))
-  }
+  // 数据已经在 parseUigf30Data/parseUigf41Data 中按 id 排序了
+  // 不需要再次排序，保持顺序与桌面版一致
 
   return {
     result,
@@ -763,8 +765,9 @@ const fetchData = async (url) => {
           item.id
         ])
 
-        // 按时间排序（从旧到新）
-        logs.sort((a, b) => new Date(a[0]) - new Date(b[0]))
+        // 使用 reverse() 与桌面版一致
+        // API 返回的数据是最新的在前，reverse() 后变成最早的在前
+        logs.reverse()
 
         resultMap.set(key, logs)
         typeMap.set(key, name)
@@ -930,6 +933,9 @@ const generateExcelData = () => {
       logs
     }
   }
+
+  // 按时间升序排序所有行，与桌面版一致
+  allRows.sort((a, b) => a.time - b.time)
 
   return { processedData, allRows, sheetColors, totalHeaderColor, rankColor, sheetOrder }
 }
