@@ -1143,8 +1143,10 @@ const exportExcel = async () => {
     const result = await Storage.saveFile(fileName, blob, 'Documents')
 
     if (result.success) {
-      state.log = `已保存: ${result.directoryPath}/${fileName}`
-      ElMessage.success(`导出成功！已保存到 ${result.directoryPath}: ${fileName}`)
+      // 解码URI以正确显示中文文件名
+      const decodedUri = decodeURIComponent(result.uri)
+      state.log = `已保存: ${decodedUri}`
+      ElMessage.success(`导出成功！已保存到: ${decodedUri}`)
     } else {
       throw new Error(result.error || '保存失败')
     }
