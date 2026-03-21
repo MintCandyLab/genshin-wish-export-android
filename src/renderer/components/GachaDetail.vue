@@ -14,7 +14,7 @@
         <span class="stat-value blue">{{ detail.total || 0 }}</span>
       </div>
       <div class="stat-item" v-if="showCountMio">
-        <span class="stat-label">未出5星</span>
+        <span class="stat-label">已垫抽数</span>
         <span class="stat-value green">{{ detail.countMio || 0 }}</span>
       </div>
     </div>

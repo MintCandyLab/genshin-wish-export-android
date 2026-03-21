@@ -108,6 +108,7 @@
       <!-- URL 输入区域 -->
       <div v-if="state.importMode === 'url'" class="url-input-section">
         <p class="input-hint">请从HoYoGet APP 复制祈愿记录的 URL</p>
+        <!-- 
         <el-input
           v-model="state.urlInput"
           type="textarea"
@@ -115,6 +116,15 @@
           placeholder="https://webstatic.mihoyo.com/..."
           class="url-input"
         />
+        原URL 输入区域 -->
+        <textarea
+          ref="urlTextarea"
+          v-model="state.urlInput"
+          rows="4"
+          placeholder="https://webstatic.mihoyo.com/..."
+          class="url-input"
+          style="width: 100%; box-sizing: border-box;"
+        ></textarea>
         <div class="help-text">
           <h4>如何获取 URL：</h4>
           <ol>
@@ -174,6 +184,12 @@ import { version } from '../../package.json'
 import PieChart from './components/PieChart.vue'
 import GachaDetail from './components/GachaDetail.vue'
 import gachaDetail from './utils/gachaDetail.js'
+
+
+import { ref } from 'vue'
+
+// 定义 ref 用于获取 textarea 元素
+const urlTextarea = ref(null)
 
 const state = reactive({
   status: 'init', // init, loading, loaded, failed
@@ -591,12 +607,28 @@ const deserializeCurrentData = (data) => {
 }
 
 // 确认获取数据
+//const confirmFetchData = async () => {
+//  if (!state.urlInput.trim()) {
+//    ElMessage.warning('请输入 URL')
+//    return
+//  }
+//  await fetchData(state.urlInput.trim())
+//}
 const confirmFetchData = async () => {
-  if (!state.urlInput.trim()) {
+  // 优先从 DOM 获取当前输入值
+  let url = ''
+  if (urlTextarea.value) {
+    url = urlTextarea.value.value
+  } else {
+    // 降级：如果没有获取到 DOM 元素，则使用响应式变量
+    url = state.urlInput
+  }
+
+  if (!url.trim()) {
     ElMessage.warning('请输入 URL')
     return
   }
-  await fetchData(state.urlInput.trim())
+  await fetchData(url.trim())
 }
 
 // 修复 authkey（桌面版逻辑）

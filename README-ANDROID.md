@@ -139,6 +139,343 @@ Android 版本需要用户手动输入祈愿记录 URL，获取方式：
 
 HoYoGet 下载地址：https://www.wyylkjs.com/HoYoGet/
 
+## Android数据存储逻辑
+
+### 1. 数据存储架构
+
+该应用采用**两层存储架构**：
+
+#### 第一层：应用内部数据存储（Preferences）
+使用 `@capacitor/preferences` 插件进行键值对存储：
+
+**核心存储键：** `gachaData`
+- 存储位置：应用私有目录（SharedPreferences）
+- 数据结构：
+  ```javascript
+  {
+    data: {
+      result: [[祈愿类型, 记录数组]],  // Map转换为数组存储
+      typeMap: [[祈愿类型, 类型名称]],
+      uid: 用户UID,
+      lang: 语言,
+      time: 时间戳
+    },
+    time: 保存时间戳
+  }
+  ```
+
+**关键代码位置：**
+- `src/renderer/utils/storage.js:9-70` - Preferences存储实现
+- `src/renderer/App-android.vue:424-428` - 数据保存
+- `src/renderer/App-android.vue:1295-1312` - 数据加载
+
+#### 第二层：文件存储（FileSystem）
+使用 `@capacitor/filesystem` 插件进行文件操作，主要用于导出Excel文件：
+
+**目录优先级策略：**
+1. **Documents（文档文件夹）** - 首选目录，用户可直接访问
+2. **External（外部存储）** - 第二备选
+3. **Cache（临时存储）** - 第三备选
+4. **Data（应用私有存储）** - 最后备选
+
+**关键代码位置：**
+- `src/renderer/utils/storage.js:78-150` - saveFile实现
+- `src/renderer/App-android.vue:1156` - Excel导出保存
+
+### 2. 数据流程
+
+#### 数据获取与保存流程：
+```
+1. 用户输入URL或选择JSON文件
+   ↓
+2. 解析数据（UIGF v3.0 / UIGF v4.1 / 本地格式）
+   ↓
+3. 与本地已存数据合并（如有）
+   ↓
+4. 保存到Preferences（gachaData）
+   ↓
+5. 数据展示
+```
+
+#### Excel导出流程：
+```
+1. 生成Excel工作簿数据
+   ↓
+2. 转换为Blob格式
+   ↓
+3. 按优先级尝试保存到各目录
+   ↓
+4. 保存成功后显示完整路径
+```
+
+### 3. Android权限配置
+
+**AndroidManifest.xml 中的关键权限：**
+```xml
+<!-- 网络请求权限 -->
+<uses-permission android:name="android.permission.INTERNET" />
+
+<!-- 外部存储读写权限 -->
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+<!-- FileProvider用于文件分享 -->
+<provider
+    android:name="androidx.core.content.FileProvider"
+    android:authorities="${applicationId}.fileprovider"
+    android:exported="false"
+    android:grantUriPermissions="true">
+</provider>
+```
+
+### 4. 数据序列化机制
+
+由于Preferences只能存储基本数据类型，应用实现了Map与数组的转换：
+
+**序列化（保存时）：** `src/renderer/App-android.vue:575-584`
+```javascript
+const serializeCurrentData = (data) => {
+  return {
+    result: Array.from(data.result.entries()),  // Map → 二维数组
+    typeMap: Array.from(data.typeMap.entries()),
+    uid: data.uid,
+    lang: data.lang,
+    time: data.time
+  }
+}
+```
+
+**反序列化（加载时）：** `src/renderer/App-android.vue:586-595`
+```javascript
+const deserializeCurrentData = (data) => {
+  return {
+    result: new Map(data.result),  // 二维数组 → Map
+    typeMap: new Map(data.typeMap),
+    uid: data.uid,
+    lang: data.lang,
+    time: data.time
+  }
+}
+```
+
+### 5. 设计亮点
+
+1. **容错机制**：文件保存采用多目录回退策略，确保至少能保存成功
+2. **数据兼容性**：支持UIGF v3.0、UIGF v4.1和本地格式的数据导入
+3. **数据合并**：新数据与本地数据智能合并，避免重复记录
+4. **用户体验**：保存成功后显示完整路径，使用URL解码正确显示中文文件名
+
+## 数据合并逻辑详解
+
+### 1. 合并的两个主要场景
+
+应用中有**两个场景**会触发数据合并：
+
+#### 场景一：JSON文件导入时的合并
+**代码位置：** `src/renderer/App-android.vue:402-407`
+```javascript
+// 获取本地数据并合并（如果存在）
+const localData = await Storage.get('gachaData', null)
+if (localData && localData.data && localData.data.result) {
+  state.log = '正在合并数据...'
+  parsedData = mergeDesktopData(deserializeCurrentData(localData.data), parsedData)
+}
+```
+
+#### 场景二：URL获取数据时的合并
+**代码位置：** `src/renderer/App-android.vue:803-837`
+```javascript
+// 获取本地数据并合并
+const localSaved = await Storage.get('gachaData', null)
+if (localSaved && localSaved.data) {
+  // 恢复本地数据为 Map
+  const localData = deserializeCurrentData(localSaved.data)
+  
+  // 按类型合并数据
+  for (const [key, newLogs] of resultMap) {
+    const localLogs = localData.result.get(key) || []
+    const merged = mergeArrays(localLogs, newLogs)
+    resultMap.set(key, merged)
+  }
+  
+  // 添加本地有但新数据中没有的类型
+  for (const [key, localLogs] of localData.result) {
+    if (!resultMap.has(key)) {
+      resultMap.set(key, localLogs)
+    }
+  }
+}
+```
+
+### 2. 核心合并函数详解
+
+#### 函数一：`mergeArrays(a, b)` - 合并单个祈愿类型的记录
+
+**代码位置：** `src/renderer/App-android.vue:285-313`
+
+这是最核心的合并函数，处理单个祈愿类型的两条记录数组的合并。
+
+**参数说明：**
+- `a`: 新导入的记录数组（按时间升序，最早的在前）
+- `b`: 本地已存的记录数组（按时间升序，最早的在前）
+
+**合并策略：**
+
+**第一步：快速判断（边界情况）**
+```javascript
+if (!a || !a.length) return b || []   // 新数据为空，返回本地数据
+if (!b || !b.length) return a         // 本地数据为空，返回新数据
+```
+
+**第二步：ID精准匹配**
+```javascript
+const minA = new Date(a[0][0]).getTime()  // 新数据最早记录的时间
+const idA = a[0][5]                        // 新数据第一条记录的ID
+
+// 从本地数据末尾向前查找相同ID的记录
+for (let i = b.length - 1; i >= 0; i--) {
+  let idB = b[i][5]
+  if (idB && idB === idA) {
+    pos = i
+    idFounded = true
+    break
+  }
+}
+```
+
+**第三步：如果ID匹配失败，使用列表匹配**
+```javascript
+if (!idFounded) {
+  let width = Math.min(11, a.length, b.length)  // 最多比较11条记录
+  for (let i = 0; i < b.length; i++) {
+    const time = new Date(b[i][0]).getTime()
+    if (time >= minA) {  // 只比较时间相近的记录
+      // 比较两条子列表是否匹配
+      if (compareList(b.slice(i, width + i), a.slice(0, width))) {
+        pos = i
+        break
+      }
+    }
+  }
+}
+```
+
+**第四步：执行合并**
+```javascript
+return b.slice(0, pos).concat(a)
+```
+- 保留本地数据中 `pos` 位置之前的所有记录
+- 追加新数据的全部记录
+- 这样可以避免重复记录，同时保留历史数据
+
+---
+
+#### 函数二：`compareList(b, a)` - 比较两条记录列表是否匹配
+
+**代码位置：** `src/renderer/App-android.vue:316-324`
+
+用于在ID匹配失败时，通过记录内容判断是否匹配。
+
+**比较逻辑：**
+```javascript
+const compareList = (b, a) => {
+  if (!b.length) return false
+  if (b.length < a.length) {
+    a = a.slice(0, b.length)
+  }
+  // 只比较前4个字段：时间、名称、类型、星级
+  const strA = a.map(item => item.slice(0, 4).join('-')).join(',')
+  const strB = b.map(item => item.slice(0, 4).join('-')).join(',')
+  return strA === strB
+}
+```
+
+**为什么只比较前4个字段？**
+- 时间、名称、类型、星级这4个字段已经足够唯一标识一条抽卡记录
+- 避免因ID不同但内容相同的记录被误判为不匹配
+
+---
+
+#### 函数三：`mergeDesktopData(localData, newData)` - 合并完整数据对象
+
+**代码位置：** `src/renderer/App-android.vue:542-573`
+
+用于JSON文件导入时，合并整个数据对象（包含所有祈愿类型）。
+
+**合并步骤：**
+
+1. **获取所有祈愿类型的Key**
+```javascript
+const allKeys = new Set([
+  ...localData.result.keys(),
+  ...newData.result.keys()
+])
+```
+
+2. **逐个合并每个祈愿类型**
+```javascript
+for (const key of allKeys) {
+  const localLogs = localData.result.get(key) || []
+  const newLogs = newData.result.get(key) || []
+  
+  if (localLogs.length === 0) {
+    mergedResult.set(key, newLogs)      // 本地没有，使用新数据
+  } else if (newLogs.length === 0) {
+    mergedResult.set(key, localLogs)    // 新数据没有，使用本地数据
+  } else {
+    const merged = mergeArrays(localLogs, newLogs)  // 两者都有，使用mergeArrays合并
+    mergedResult.set(key, merged)
+  }
+}
+```
+
+3. **合并其他元数据**
+```javascript
+return {
+  result: mergedResult,
+  typeMap: localData.typeMap || newData.typeMap,  // 优先使用本地类型映射
+  uid: newData.uid || localData.uid,               // 优先使用新数据的UID
+  lang: localData.lang || newData.lang,             // 优先使用本地语言
+  time: Date.now()
+}
+```
+
+### 3. 数据合并的设计亮点
+
+1. **双重匹配机制**
+   - 第一层：ID精准匹配（快速、可靠）
+   - 第二层：列表内容匹配（作为后备方案）
+
+2. **按祈愿类型独立合并**
+   - 每个祈愿类型（角色池、武器池等）独立处理
+   - 互不影响，避免跨类型数据混淆
+
+3. **保留历史记录**
+   - 总是保留本地数据的历史部分
+   - 只追加新数据，不删除已有记录
+
+4. **容错性强**
+   - 处理边界情况（其中一方为空）
+   - 即使ID丢失，也能通过内容匹配
+
+5. **URL获取时的优化**
+   - 在获取数据过程中就检查是否已有本地数据（`getGachaLogs`函数中）
+   - 如果发现已有相同记录，提前停止获取，减少网络请求
+
+### 4. 记录数据结构
+
+每条抽卡记录是一个数组，格式为：
+```javascript
+[
+  time,        // 索引0: 时间戳
+  name,        // 索引1: 物品名称
+  item_type,   // 索引2: 物品类型（角色/武器）
+  rank_type,   // 索引3: 星级（3/4/5）
+  gacha_type,  // 索引4: 祈愿类型
+  id           // 索引5: 记录ID（用于匹配）
+]
+```
+
 ## 常见问题
 
 **Q: 为什么 Android 版不能自动获取游戏数据？**

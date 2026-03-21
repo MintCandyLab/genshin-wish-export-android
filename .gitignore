@@ -12,6 +12,7 @@ build/builder-effective-config.yaml
 dist/electron/main
 dist/electron/renderer
 dist/web
+dist/android
 userData
 npm-debug.log*
 yarn-debug.log*
