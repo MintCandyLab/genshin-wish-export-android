@@ -80,6 +80,18 @@
       class="url-dialog"
     >
       <div class="import-options">
+        <!-- 从 JSON 文件导入 -->
+        <div class="import-option" @click="state.importMode = 'file'">
+          <div class="option-icon">
+            <el-icon :size="32"><Document /></el-icon>
+          </div>
+          <div class="option-content">
+            <h4>从 JSON 文件导入</h4>
+            <p>导入 提瓦特小助手 或 小黑盒 的数据</p>
+          </div>
+          <el-icon v-if="state.importMode === 'file'" :size="20" class="check-icon"><Check /></el-icon>
+        </div>
+
         <!-- 从 URL 获取 -->
         <div class="import-option" @click="state.importMode = 'url'">
           <div class="option-icon">
@@ -90,18 +102,6 @@
             <p>从HoYoGet 获取祈愿记录链接</p>
           </div>
           <el-icon v-if="state.importMode === 'url'" :size="20" class="check-icon"><Check /></el-icon>
-        </div>
-
-        <!-- 从 JSON 文件导入 -->
-        <div class="import-option" @click="state.importMode = 'file'">
-          <div class="option-icon">
-            <el-icon :size="32"><Document /></el-icon>
-          </div>
-          <div class="option-content">
-            <h4>从 JSON 文件导入</h4>
-            <p>导入 UIGF 或本地 JSON 文件</p>
-          </div>
-          <el-icon v-if="state.importMode === 'file'" :size="20" class="check-icon"><Check /></el-icon>
         </div>
       </div>
 
@@ -129,8 +129,7 @@
           <h4>如何获取 URL：</h4>
           <ol>
             <li>下载 HoYoGet APP</li>
-            <li>下载地址 https://www.wyylkjs.com/HoYoGet/</li>
-
+            <li>下载地址：<input type="text" readonly value="https://www.wyylkjs.com/HoYoGet/" class="copyable-input" /></li>
           </ol>
         </div>
       </div>
@@ -153,9 +152,8 @@
         <div class="help-text">
           <h4>如何获取json文件：</h4>
           <ul>
-            <li><strong>下载 小黑盒 app</strong></li>
-            <li><strong>在小黑盒 app里绑定原神账号</strong></li>
-            <li><strong>在小黑盒 app里点击 “祈愿分析” 最下面的 “数据管理”，选择“导出”</strong></li>
+            <li><strong>提瓦特小助手 导出网址：</strong><input type="text" readonly value="https://www.lelaer.com/uigf.php" class="copyable-input" /></li>
+            <li><strong>小黑盒 导出：</strong>在小黑盒 app里点击 "祈愿分析" 最下面的 "数据管理"，选择"导出"</li>
           </ul>
         </div>
       </div>
@@ -196,7 +194,7 @@ const state = reactive({
   log: '',
   urlInput: '',
   showUrlDlg: false,
-  importMode: 'url', // 'url' or 'file'
+  importMode: 'file', // 'url' or 'file'
   selectedFileName: '',
   saveDirectoryInfo: '', // 保存目录信息
   currentData: null // 祈愿数据存储 - 与桌面版一致的数据结构
@@ -339,7 +337,7 @@ const compareList = (b, a) => {
 const handleLoadClick = () => {
   state.showUrlDlg = true
   state.urlInput = ''
-  state.importMode = 'url'
+  state.importMode = 'file'
   state.selectedFileName = ''
 }
 
@@ -1587,5 +1585,25 @@ onMounted(async () => {
 
 .url-input {
   margin-bottom: 16px;
+}
+
+.copyable-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+  font-size: 13px;
+  color: #606266;
+  box-sizing: border-box;
+  margin-top: 4px;
+  cursor: text;
+  user-select: text;
+}
+
+.copyable-input:focus {
+  outline: none;
+  border-color: #409eff;
+  background-color: #fff;
 }
 </style>
